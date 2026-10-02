@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ConnAct</title>
+<style>
+:root{box-sizing:border-box;--bg1:#5b1427;--bg2:#3a2218;--card:#6b2a33;--card2:#4a2a20;--ink:#fbeee6;--mut:#d3b2a2;--acc:#e8b27a;--line:#8a5048;--ok:#9fd9a8;--bad:#ff9d9d}
+:root:not([data-theme="light"]){--bg1:#430d1c;--bg2:#2a1710;--card:#591f29;--card2:#3a201a;--line:#6e3d36}
+:root[data-theme="dark"]{--bg1:#430d1c;--bg2:#2a1710;--card:#591f29;--card2:#3a201a;--line:#6e3d36}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;min-height:100vh;background:linear-gradient(160deg,var(--bg1),var(--bg2));background-color:var(--bg2);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+header{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--bg1);position:sticky;top:0;z-index:5;flex-wrap:wrap}
+.logo{font-weight:800;font-size:20px;cursor:pointer}.logo b{color:var(--acc)}.sp{flex:1}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:8px 14px;background:var(--acc);color:#3a1410;font-weight:600}
+button.g{background:transparent;color:var(--ink);border:1px solid var(--line)}button.s{padding:4px 10px;font-size:13px}button.bad{background:var(--bad)}
+main{max-width:1000px;margin:0 auto;padding:16px}
+h2{margin:18px 0 8px;font-size:15px;color:var(--acc);text-transform:uppercase;letter-spacing:1px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.chip{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:99px;padding:1px 9px;font-size:12px;margin:2px 3px 2px 0;color:var(--acc)}
+.mut{color:var(--mut);font-size:13px}.live{color:var(--ok);font-size:12px;font-weight:700}.live:before{content:"● "}
+input,textarea{width:100%;font:inherit;color:var(--ink);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px;margin:4px 0 10px}
+label{font-size:13px;color:var(--mut)}.err{color:var(--bad);min-height:1.3em;font-size:13px}
+.auth{max-width:440px;margin:24px auto}.tabs{display:flex;gap:8px;margin-bottom:12px}
+.room{display:grid;grid-template-columns:1fr 250px;gap:12px}@media(max-width:700px){.room{grid-template-columns:1fr}}
+#msgs{height:55vh;overflow-y:auto;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:12px}
+.m{margin-bottom:8px;max-width:85%}.m.me{margin-left:auto;text-align:right}
+.m span{display:inline-block;background:var(--card);padding:6px 11px;border-radius:12px;text-align:left;overflow-wrap:anywhere}
+.m.me span{background:var(--acc);color:#3a1410}.m small{display:block;color:var(--mut);font-size:11px}
+.row{display:flex;gap:8px;align-items:center;margin-top:8px}.row input{margin:0}
+.mem{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:14px;justify-content:space-between}
+#toasts{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;z-index:9;max-width:320px}
+.t{background:var(--acc);color:#3a1410;padding:10px 14px;border-radius:12px;font-weight:600;box-shadow:0 4px 14px #0008}
+#bellp{position:absolute;right:12px;top:58px;width:min(320px,92vw);display:none;z-index:8}
+.badge{background:var(--bad);color:#3a1410;border-radius:99px;padding:0 6px;font-size:12px;margin-left:4px}
+</style></head><body>
+<header id="hd"><div class="logo" id="home">Conn<b>Act</b></div><div class="sp"></div></header>
+<div class="card" id="bellp"></div>
+<main id="app"><p class="mut">Loading…</p></main>
+<div id="toasts"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tg=s=>[...new Set(String(s||'').toLowerCase().split(/[,#\n]+/).map(x=>x.trim()).filter(Boolean))].slice(0,12);
+const chips=a=>(a||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+const mail=n=>n.toLowerCase()+'@connact.app';
+function toast(t){const d=document.createElement('div');d.className='t';d.textContent=t;$('#toasts').appendChild(d);setTimeout(()=>d.remove(),6000)}
+if(typeof supabase==='undefined'||SUPABASE_URL.includes('YOUR-PROJECT')){
+ $('#app').innerHTML='<div class="card">Setup needed: add your Supabase URL and anon key in <b>config.js</b> (see README).</div>';throw new Error('config')}
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+let me=null,prof=null,rooms=[],cur=null,members=[],msgs=[],view='explore',roomCh=null,feedCh=null,shell=null,ck='',tab='login';
+const room=()=>rooms.find(r=>r.id===cur);
+const match=r=>{const m=[...(prof?.interests||[]),...(prof?.want_attend||[])];return (r.tags||[]).filter(t=>m.some(x=>t.includes(x)||x.includes(t)))};
+const status=()=>(members.find(m=>m.user_id===me)||{}).status;
+const isHost=()=>room()&&room().host_id===me;
+const canChat=()=>isHost()||status()==='approved';
+
+// ---------- session ----------
+sb.auth.onAuthStateChange((ev,s)=>{setTimeout(()=>boot(s),0)});
+async function boot(s){
+ if(!s){me=null;prof=null;cur=null;stopRooms();header();authView();return}
+ if(me===s.user.id&&prof)return;
+ me=s.user.id;
+ const{data}=await sb.from('profiles').select('*').eq('id',me).single();prof=data;
+ if(!prof){toast('Profile missing. Please sign up again.');await sb.auth.signOut();return}
+ await loadRooms();startFeed();header();render();
+}
+function header(){
+ $('#hd').innerHTML=`<div class="logo" id="home">Conn<b>Act</b></div><div class="sp"></div>`+(me?`<button class="g" data-v="explore">Explore</button><button class="g" data-v="profile">Profile</button><button class="g" id="bell">🔔<span id="bc"></span></button><button class="g" id="out">Log out</button>`:'');
+}
+
+// ---------- auth ----------
+function authView(){
+ $('#bellp').style.display='none';
+ const su=tab==='signup';
+ $('#app').innerHTML=`<div class="card auth"><div class="tabs"><button class="${su?'g':''}" data-tab="login">Log in</button><button class="${su?'':'g'}" data-tab="signup">Sign up</button></div>
+ <label>Name (3-20 letters, numbers or _)<input id="n" autocomplete="username" maxlength="20"></label>
+ <label>Password${su?' (8+ chars, upper, lower, number)':''}<input id="p" type="password" autocomplete="${su?'new-password':'current-password'}"></label>
+ ${su?`<label>Confirm password<input id="p2" type="password" autocomplete="new-password"></label>
+ <label>Age<input id="a" type="number" min="13" max="120"></label>
+ <label>Your interests (comma separated)<input id="i" placeholder="music, coding, football"></label>
+ <label>Things you can host<input id="h" placeholder="guitar basics, python help"></label>
+ <label>Things you want to attend<input id="w" placeholder="design, cricket talk"></label>`:''}
+ <div class="err" id="e"></div><button id="go">${su?'Create account':'Log in'}</button></div>`;
+}
+async function doAuth(){
+ const e=m=>{$('#e').textContent=m},n=$('#n').value.trim().toLowerCase(),p=$('#p').value;
+ if(!/^[a-z0-9_]{3,20}$/.test(n))return e('Name must be 3-20 letters, numbers or underscore.');
+ if(tab==='login'){
+  const{error}=await sb.auth.signInWithPassword({email:mail(n),password:p});
+  return e(error?'Wrong name or password.':'');
+ }
+ if(p.length<8||!/[a-z]/.test(p)||!/[A-Z]/.test(p)||!/\d/.test(p))return e('Password needs 8+ characters with upper case, lower case and a number.');
+ if(p!==$('#p2').value)return e('Passwords do not match.');
+ const age=parseInt($('#a').value,10);if(!(age>=13&&age<=120))return e('You must be 13 or older.');
+ const interests=tg($('#i').value);if(!interests.length)return e('Add at least one interest.');
+ const{data,error}=await sb.auth.signUp({email:mail(n),password:p,options:{data:{username:n,age,interests,can_host:tg($('#h').value),want_attend:tg($('#w').value)}}});
+ if(error)return e(/registered|exists/i.test(error.message)?'That name is taken.':error.message);
+ if(!data.session)e('Account created. Turn off "Confirm email" in Supabase Auth settings, then log in.');
+}
+
+// ---------- rooms ----------
+async function loadRooms(){const{data}=await sb.from('rooms').select('*,profiles(username)').order('created_at',{ascending:false});rooms=data||[];}
+function startFeed(){
+ stopRooms();
+ feedCh=sb.channel('feed').on('postgres_changes',{event:'*',schema:'public',table:'rooms'},async p=>{
+  await loadRooms();
+  if(p.eventType==='INSERT'&&p.new.host_id!==me&&match(p.new).length)toast('New room for you: '+p.new.title);
+  if(cur&&!room()){toast('This room has ended.');leaveView()}else render();
+ }).subscribe();
+}
+function stopRooms(){if(feedCh)sb.removeChannel(feedCh);if(roomCh)sb.removeChannel(roomCh);feedCh=roomCh=null}
+function render(){
+ if(!me)return;
+ const sug=rooms.filter(r=>r.host_id!==me&&match(r).length);
+ $('#bc').innerHTML=sug.length?`<span class="badge">${sug.length}</span>`:'';
+ $('#bellp').innerHTML=sug.length?'<b>Rooms matching your interests</b>'+sug.map(r=>`<div class="mem"><div>${esc(r.title)}<br>${chips(match(r))}</div><button class="s" data-open="${r.id}">View</button></div>`).join(''):'<span class="mut">No matches yet. Update interests in Profile.</span>';
+ if(cur&&room())return roomView();
+ cur=null;shell=null;
+ if(view==='profile')return profileView();
+ exploreView(sug);
+}
+const card=r=>`<div class="card"><span class="live">LIVE</span> <b>${esc(r.title)}</b><div class="mut">${esc(r.description)}</div>${chips(r.tags)}<div class="mut">Host: ${esc(r.profiles?.username)}</div><div class="row"><button class="s" data-open="${r.id}">${r.host_id===me?'Open (host)':'Watch / Join'}</button></div></div>`;
+function exploreView(sug){
+ const mine=rooms.filter(r=>r.host_id===me);
+ $('#app').innerHTML=`<div class="row"><h2 style="margin:0">Explore</h2><div class="sp"></div><button id="nr">+ New room</button></div>
+ <div class="card" id="nf" style="display:none"><label>Room title<input id="rt" maxlength="60"></label><label>What is it about?<textarea id="rd" rows="2" maxlength="300"></textarea></label><label>Topics (comma separated)<input id="rg"></label>
+ ${prof.can_host.length?`<div class="mut">You can host: ${chips(prof.can_host)}</div>`:''}<div class="row"><button id="rs">Create &amp; host</button></div></div>
+ ${sug.length?'<h2>Suggested for you</h2><div class="grid">'+sug.map(card).join('')+'</div>':''}
+ ${mine.length?'<h2>Hosted by you</h2><div class="grid">'+mine.map(card).join('')+'</div>':''}
+ <h2>All live rooms</h2>${rooms.length?'<div class="grid">'+rooms.map(card).join('')+'</div>':'<p class="mut">No rooms yet. Create the first one!</p>'}`;
+}
+async function createRoom(){
+ const t=$('#rt').value.trim();if(!t)return toast('Give your room a title');
+ const{data,error}=await sb.from('rooms').insert({host_id:me,title:t,description:$('#rd').value.trim(),tags:tg($('#rg').value)}).select().single();
+ if(error)return toast('Could not create room');
+ await loadRooms();open(data.id);
+}
+async function open(id){
+ if(roomCh)sb.removeChannel(roomCh);
+ cur=id;shell=null;members=[];msgs=[];$('#bellp').style.display='none';
+ await Promise.all([loadMembers(),loadMsgs()]);
+ roomCh=sb.channel('room-'+id)
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'room_id=eq.'+id},p=>{msgs.push(p.new);drawMsgs()})
+  .on('postgres_changes',{event:'*',schema:'public',table:'members',filter:'room_id=eq.'+id},async()=>{await loadMembers();if(cur===id){drawSide();drawComp()}}).subscribe();
+ render();
+}
+async function loadMembers(){const{data}=await sb.from('members').select('*,profiles(username)').eq('room_id',cur);members=data||[]}
+async function loadMsgs(){const{data}=await sb.from('messages').select('*').eq('room_id',cur).order('created_at').limit(300);msgs=data||[]}
+function leaveView(){if(roomCh)sb.removeChannel(roomCh);roomCh=null;cur=null;shell=null;render()}
+function roomView(){
+ const r=room();
+ if(shell!==cur){shell=cur;ck='';
+  $('#app').innerHTML=`<div class="row"><button class="g s" id="back">← Back</button><div class="sp"></div>${isHost()?'<button class="s bad" id="end">End room</button>':(status()==='approved'||status()==='pending')?'<button class="s bad" id="leave">Leave room</button>':''}</div>
+  <h2>${esc(r.title)} <span class="live">LIVE</span></h2><div class="mut">${esc(r.description)}</div>${chips(r.tags)}
+  <div class="room" style="margin-top:10px"><div><div id="msgs"></div><div id="comp"></div></div><div class="card" id="side"></div></div>`}
+ drawSide();drawComp();drawMsgs();
+}
+function drawSide(){
+ const r=room();if(!r||!$('#side'))return;
+ const pen=members.filter(m=>m.status==='pending'),ap=members.filter(m=>m.status==='approved');
+ let h=`<b>Host</b><div>${esc(r.profiles?.username)}</div>`;
+ if(isHost())h+=`<h2>Requests (${pen.length})</h2>`+(pen.map(m=>`<div class="mem">${esc(m.profiles?.username)}<span><button class="s" data-ok="${m.user_id}">Allow</button> <button class="s bad" data-no="${m.user_id}">Deny</button></span></div>`).join('')||'<span class="mut">None waiting</span>');
+ h+=`<h2>Members (${ap.length})</h2>`+(ap.map(m=>`<div class="mem">${esc(m.profiles?.username)}${isHost()?`<button class="s g" data-rm="${m.user_id}">Remove</button>`:''}</div>`).join('')||'<span class="mut">No members yet</span>');
+ $('#side').innerHTML=h;
+}
+function drawComp(){
+ if(!$('#comp'))return;const k=String(canChat())+status();if(k===ck)return;ck=k;
+ const s=status();
+ $('#comp').innerHTML=canChat()?'<div class="row"><input id="mi" maxlength="500" placeholder="Type a message…"><button id="send">Send</button></div>'
+  :s==='pending'?'<p class="mut">⏳ Request sent. Waiting for the host. You can keep watching live.</p>'
+  :s==='denied'?'<p class="mut">The host declined your request. You can still watch live.</p>'
+  :'<p class="mut">👀 You are watching live.</p><button id="req">Request to join chat</button>';
+}
+function drawMsgs(){
+ const b=$('#msgs');if(!b)return;const end=b.scrollHeight-b.scrollTop-b.clientHeight<60;
+ b.innerHTML=msgs.map(m=>`<div class="m${m.user_id===me?' me':''}"><small>${esc(m.username)} · ${new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</small><span>${esc(m.body)}</span></div>`).join('')||'<p class="mut">No messages yet.</p>';
+ if(end)b.scrollTop=b.scrollHeight;
+}
+async function send(){
+ const i=$('#mi'),t=i.value.trim();if(!t)return;i.value='';
+ const{error}=await sb.from('messages').insert({room_id:cur,user_id:me,body:t});if(error){toast('Message not sent');i.value=t}
+}
+
+// ---------- profile ----------
+function profileView(){
+ $('#app').innerHTML=`<div class="card auth"><h2 style="margin-top:0">${esc(prof.username)}</h2><div class="mut">Age ${prof.age}</div>
+ <label>Interests<input id="i" value="${esc(prof.interests.join(', '))}"></label>
+ <label>Things you can host<input id="h" value="${esc(prof.can_host.join(', '))}"></label>
+ <label>Things you want to attend<input id="w" value="${esc(prof.want_attend.join(', '))}"></label>
+ <button id="sp">Save profile</button>
+ <h2>Change password</h2><label>New password<input id="np" type="password" autocomplete="new-password"></label><label>Confirm<input id="np2" type="password" autocomplete="new-password"></label>
+ <div class="err" id="e"></div><button class="g" id="cp">Update password</button></div>`;
+}
+async function saveProfile(){
+ const u={interests:tg($('#i').value),can_host:tg($('#h').value),want_attend:tg($('#w').value)};
+ const{error}=await sb.from('profiles').update(u).eq('id',me);
+ if(error)return toast('Could not save');Object.assign(prof,u);toast('Profile saved');
+}
+async function changePw(){
+ const p=$('#np').value;
+ if(p.length<8||!/[a-z]/.test(p)||!/[A-Z]/.test(p)||!/\d/.test(p))return $('#e').textContent='Password needs 8+ characters with upper, lower and a number.';
+ if(p!==$('#np2').value)return $('#e').textContent='Passwords do not match.';
+ const{error}=await sb.auth.updateUser({password:p});$('#e').textContent=error?error.message:'';if(!error){toast('Password updated');$('#np').value=$('#np2').value=''}
+}
+
+// ---------- events ----------
+document.addEventListener('click',async e=>{
+ const t=e.target.closest('button,.logo');if(!t)return;const d=t.dataset,id=t.id;
+ try{
+ if(d.tab){tab=d.tab;return authView()}
+ if(id==='go')return doAuth();
+ if(id==='home')return me&&(view='explore',leaveView());
+ if(d.v){view=d.v;$('#bellp').style.display='none';return leaveView()}
+ if(id==='out'){await sb.auth.signOut();return}
+ if(id==='bell'){const b=$('#bellp');b.style.display=b.style.display==='block'?'none':'block';return}
+ if(d.open)return open(d.open);
+ if(id==='back')return leaveView();
+ if(id==='nr'){const f=$('#nf');f.style.display=f.style.display==='none'?'block':'none';return}
+ if(id==='rs')return createRoom();
+ if(id==='req'){const{error}=await sb.from('members').insert({room_id:cur,user_id:me,status:'pending'});if(error)toast('Could not send request');return}
+ if(d.ok){await sb.from('members').update({status:'approved'}).eq('room_id',cur).eq('user_id',d.ok);return}
+ if(d.no){await sb.from('members').update({status:'denied'}).eq('room_id',cur).eq('user_id',d.no);return}
+ if(d.rm){await sb.from('members').delete().eq('room_id',cur).eq('user_id',d.rm);return}
+ if(id==='leave'){await sb.from('members').delete().eq('room_id',cur).eq('user_id',me);toast('You left the room');return leaveView()}
+ if(id==='end'){if(confirm('End this room for everyone?')){await sb.from('rooms').delete().eq('id',cur)}return}
+ if(id==='send')return send();
+ if(id==='sp')return saveProfile();
+ if(id==='cp')return changePw();
+ }catch(err){toast('Something went wrong. Please try again.')}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'){if(e.target.id==='mi')send();else if(e.target.closest('.auth')&&$('#go'))doAuth()}});
+</script></body></html>
